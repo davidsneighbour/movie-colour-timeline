@@ -4,7 +4,7 @@ A local CLI that turns a video into a chronological colour stripe, a frequency p
 
 ## Requirements and setup
 
-Use Node.js 22 or later, npm, FFmpeg, and FFprobe. Both FFmpeg tools must be on your executable path, or configured with their full paths. The renderer uses `@fontsource/barlow-semi-condensed` for its font files and `fontkit` for letter shaping and outlines. TypeScript, Node.js types, and Fontkit types are development dependencies.
+Use Node.js 22 or later, npm, FFmpeg, and FFprobe. Both FFmpeg tools must be on your executable path, or configured with their full paths. Banner PNG export requires an FFmpeg build with SVG decoding support. The renderer uses `@fontsource/barlow-semi-condensed` for its font files and `fontkit` for letter shaping and outlines. TypeScript, Node.js types, and Fontkit types are development dependencies.
 
 On Debian or Ubuntu, install FFmpeg with `sudo apt install ffmpeg`. Then, from this project directory:
 
@@ -31,7 +31,7 @@ node dist/cli.js select art/my-film/analysis.json --candidate 4
 node dist/cli.js render art/my-film/analysis.json --out art/my-film/render --config config.example.json --title 'My film'
 ```
 
-The renderer creates `timeline.svg`, `timeline.png`, and, after a hero selection, `banner.svg`. The banner embeds its hero image and its lettering as vector outlines, so it is a standalone file with no font installation, CDN requests, or SVG webfont support required. It places a large uppercase title over the bottom-left of the hero, followed by the timeline and palette swatches with square-root frequency widths. More frequent colours get wider blocks, while a minimum width protects rare-colour labels. The hex value and actual percentage appear on separate lines. The hero uses a centred cover crop to fit the composition. SVG can be displayed in a browser or imported into an image editor for export. Local demonstration outputs can also include a PNG banner exported with FFmpeg. Generated examples and source videos are excluded from Git.
+The renderer creates `timeline.svg`, `timeline.png`, and, after a hero selection, `banner.svg` and `banner.png`. The banner embeds its hero image and its lettering as vector outlines, so it is a standalone file with no font installation, CDN requests, or SVG webfont support required. It places a large uppercase title over the bottom-left of the hero, followed by the timeline and palette swatches with square-root frequency widths. More frequent colours get wider blocks, while a minimum width protects rare-colour labels. The hex value and actual percentage appear on separate lines. The hero uses a centred cover crop to fit the composition. SVG can be displayed in a browser or imported into an image editor for export. After writing the banner SVG, the renderer uses FFmpeg to convert it to PNG. Generated examples and source videos are excluded from Git.
 
 Rendering before selecting a hero creates the timeline and reports that a hero is needed for the banner. Selecting another candidate updates only `heroCandidateId` in the JSON. Use a different render output directory to keep multiple compositions. Render files in the same directory are replaced.
 
@@ -155,7 +155,37 @@ ffmpeg -v error -y -f lavfi -i 'testsrc2=size=640x360:rate=12:duration=4' -vf 'p
 node dist/cli.js analyse demo/source.mkv --out demo/analysis --config demo/config.json
 node dist/cli.js select demo/analysis/analysis.json --candidate 2
 node dist/cli.js render demo/analysis/analysis.json --out demo/artwork --config demo/config.json --title 'A study in moving colour'
-ffmpeg -v error -y -i demo/artwork/banner.svg -frames:v 1 -threads 1 demo/artwork/banner.png
 ```
 
-The optional final PNG conversion requires an FFmpeg build with SVG decoding support. The CLI's standalone banner SVG already contains the hero image and font outlines.
+The render command creates both banner formats. The standalone banner SVG contains the hero image and font outlines.
+
+## Social image exports
+
+Export all eight aspect ratios from an existing analysis and selected hero:
+
+```sh
+node dist/cli.js render alien/analysis.json --out alien/social --title 'Alien: Romulus' --social
+```
+
+This creates the usual timeline and banner, plus standalone `banner-NAME.svg` and `banner-NAME.png` files. The presets are 1:1 (1080 × 1080), 4:5 (1080 × 1350), 9:16 (1080 × 1920), 40:21 (1200 × 630), 851:315 (851 × 315), 3:1 (1500 × 500), 16:9 (1920 × 1080), and 4:1 (1600 × 400). These are export dimensions, rather than a claim about current platform requirements. Portrait presets use two palette columns and enough rows for every colour. Each row uses frequency-weighted widths; all hex values and percentages are retained. Typography and insets scale with the composition and shrink further to fit. The timeline remains chronological across the full width.
+
+For individual compositions, add an `exports` array to a configuration file. A non-empty array takes precedence over `--social` and is rendered even without that flag. An empty array keeps the normal single-banner behaviour unless `--social` is supplied. Names become filename suffixes and must be unique letters, digits, underscores, or hyphens, starting with a letter or digit.
+
+```json
+{
+  "exports": [
+    {
+      "name": "portrait",
+      "width": 1080,
+      "height": 1350,
+      "paletteColumns": 2,
+      "timelineHeight": 180,
+      "paletteHeight": 300,
+      "titlePosition": "top-right",
+      "heroPosition": "xMaxYMid"
+    }
+  ]
+}
+```
+
+`paletteHeight` is the total height of all palette rows. By default, it uses 12% of the image height, and the timeline uses one sixth. `paletteColumns` defaults to a single row, except in the built-in portrait presets. `titlePosition` accepts `top-left`, `top-centre`, `top-right`, `bottom-left`, `bottom-centre`, or `bottom-right`; its default is `bottom-left`. The contrast fade follows the title. `heroPosition` uses SVG cover alignment: combine `xMin`, `xMid`, or `xMax` with `YMin`, `YMid`, or `YMax`. Its default is `xMidYMid`. The hero is cropped to fill its area; choose its alignment separately for each export to keep the subject visible. Strip heights must leave room for the hero, and each export is limited to 32 million pixels.

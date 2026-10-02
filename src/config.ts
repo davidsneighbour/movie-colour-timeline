@@ -1,4 +1,20 @@
 import { readFile } from 'node:fs/promises';
+export interface ExportPreset {
+  name:string; width:number; height:number;
+  paletteColumns?:number; timelineHeight?:number; paletteHeight?:number;
+  titlePosition?:'bottom-left'|'bottom-centre'|'bottom-right'|'top-left'|'top-centre'|'top-right';
+  heroPosition?:'xMinYMin'|'xMidYMin'|'xMaxYMin'|'xMinYMid'|'xMidYMid'|'xMaxYMid'|'xMinYMax'|'xMidYMax'|'xMaxYMax';
+}
+export const socialPresets:ExportPreset[] = [
+  {name:'1x1',width:1080,height:1080},
+  {name:'4x5',width:1080,height:1350,paletteColumns:2},
+  {name:'9x16',width:1080,height:1920,paletteColumns:2},
+  {name:'40x21',width:1200,height:630},
+  {name:'851x315',width:851,height:315},
+  {name:'3x1',width:1500,height:500},
+  {name:'16x9',width:1920,height:1080},
+  {name:'4x1',width:1600,height:400},
+];
 export const defaults = {
   samples:480, analysisWidth:96, frameClusters:6, iterations:24, start:0, end:null as number|null,
   crop:'auto' as 'auto'|'none'|{x:number;y:number;width:number;height:number},
@@ -8,6 +24,7 @@ export const defaults = {
   paletteWidthExponent:.5,paletteMinWidth:80,
   candidateCount:12,candidateWidth:960,renderWidth:1920,timelineHeight:180,bannerHeight:1080,paletteHeight:130,
   titleFontSize:84,paletteFontSize:36,titleInset:16,
+  exports:[] as ExportPreset[],
   background:'#10151a',ffmpeg:'ffmpeg',ffprobe:'ffprobe',timeoutMs:120000,
 };
 export type Config = typeof defaults;
@@ -34,5 +51,19 @@ export async function config(path?: string, base: Partial<Config> = {}): Promise
   }
   if(!/^#[0-9a-f]{6}$/i.test(c.background)) throw new Error('background must be a six-digit hex colour.');
   for(const key of ['ffmpeg','ffprobe'] as const) if(typeof c[key]!=='string' || !c[key]) throw new Error(`${key} must be a command or executable path.`);
+  if(!Array.isArray(c.exports) || c.exports.length>32) throw new Error('exports must be an array of at most 32 presets.');
+  const names=new Set<string>();
+  for(const preset of c.exports) {
+    if(!preset || typeof preset!=='object' || Array.isArray(preset)) throw new Error('Each export must be an object.');
+    for(const key of Object.keys(preset)) if(!['name','width','height','paletteColumns','timelineHeight','paletteHeight','titlePosition','heroPosition'].includes(key)) throw new Error(`Unknown export key: ${key}`);
+    if(typeof preset.name!=='string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(preset.name) || names.has(preset.name.toLowerCase())) throw new Error('Export names must be unique, safe filename stems.');
+    names.add(preset.name.toLowerCase());
+    for(const key of ['width','height'] as const) if(!Number.isSafeInteger(preset[key]) || preset[key]<64 || preset[key]>16384) throw new Error(`Export ${key} must be an integer from 64 to 16384.`);
+    if(preset.width*preset.height>32_000_000) throw new Error('Export exceeds 32 million pixels.');
+    for(const key of ['paletteColumns','timelineHeight','paletteHeight'] as const) if(preset[key]!==undefined && (!Number.isSafeInteger(preset[key]) || preset[key]!<1 || preset[key]!>16384)) throw new Error(`Export ${key} must be a positive integer within resource limits.`);
+    if(preset.titlePosition!==undefined && !/^(top|bottom)-(left|centre|right)$/.test(preset.titlePosition)) throw new Error('Invalid export titlePosition.');
+    if(preset.heroPosition!==undefined && !/^x(Min|Mid|Max)Y(Min|Mid|Max)$/.test(preset.heroPosition)) throw new Error('Invalid export heroPosition.');
+    if((preset.timelineHeight??Math.round(preset.height/6))+(preset.paletteHeight??Math.round(preset.height*.12))>=preset.height) throw new Error('Export strips must leave space for the hero.');
+  }
   return c;
 }

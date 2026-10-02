@@ -15,6 +15,7 @@
   "paletteErrorFloor": 0.0001,
   "candidateCount": 12,
   "candidateWidth": 960,
+  "exports": [],
   "renderWidth": 1920,
   "timelineHeight": 180,
   "bannerHeight": 1080,
